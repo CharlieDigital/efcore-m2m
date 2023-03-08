@@ -28,16 +28,6 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapGet("/init", async(Database db) => {
-    var product1 = await db.Products.AddAsync(new Product() {
-        Id = Guid.NewGuid(),
-        Name = "Product 1"
-    });
-
-    var product2 = await db.Products.AddAsync(new Product() {
-        Id = Guid.NewGuid(),
-        Name = "Product 2"
-    });
-
     var media1 = await db.Media.AddAsync(new Media() {
         Id = Guid.NewGuid(),
         Name = "Media 1"
@@ -48,26 +38,21 @@ app.MapGet("/init", async(Database db) => {
         Name = "Media 2"
     });
 
-    var media = new List<ProductMedia>() {
-        new () {
-            Product = product1.Entity,
-            Media = media1.Entity
-        },
-        new () {
-            Product = product1.Entity,
-            Media = media2.Entity
-        },
-        new () {
-            Product = product2.Entity,
-            Media = media1.Entity
-        },
-        new () {
-            Product = product2.Entity,
-            Media = media2.Entity
-        },
+    var media = new List<Media>() {
+        media1.Entity, media2.Entity
     };
 
-    await db.ProductMedia.AddRangeAsync(media);
+    var product1 = await db.Products.AddAsync(new Product() {
+        Id = Guid.NewGuid(),
+        Name = "Product 1",
+        Media = media
+    });
+
+    var product2 = await db.Products.AddAsync(new Product() {
+        Id = Guid.NewGuid(),
+        Name = "Product 2",
+        Media = media
+    });
 
     await db.SaveChangesAsync();
 })
@@ -99,8 +84,7 @@ app.MapGet("/products/", async (Database db) =>
 {
     var products = await db.Products
         .TagWith("LOAD_PRODUCT")
-        .Include(p => p.ProductMedia!)
-        .ThenInclude(pm => pm.Media!)
+        .Include(p => p.Media!)
         .ToListAsync();
 
     return products;
@@ -119,24 +103,13 @@ public abstract class Entity
 
     public class Product : Entity
     {
-        public virtual List<ProductMedia>? ProductMedia { get; set; }
+        public virtual List<Media>? Media { get; set; }
     }
 
     public class Media : Entity
     {
         [JsonIgnore]
-        public virtual List<ProductMedia>? ProductMedia { get; set; }
-    }
-
-    public class ProductMedia {
-        public Guid ProductId { get; set; }
-        [JsonIgnore]
-        [NotNull]
-        public Product? Product { get; set;}
-
-        public Guid MediaId { get; set; }
-        [NotNull]
-        public Media? Media { get; set; }
+        public virtual List<Product>? Products { get; set; }
     }
 
 
@@ -150,24 +123,6 @@ public class Database : DbContext
 
     [NotNull]
     public DbSet<Media>? Media { get; set; }
-
-    [NotNull]
-    public DbSet<ProductMedia>? ProductMedia { get; set; }
-
-    protected override void OnModelCreating(ModelBuilder builder) {
-        builder.Entity<ProductMedia>()
-            .HasKey(pm => new { pm.ProductId, pm.MediaId });
-
-        builder.Entity<ProductMedia>()
-            .HasOne(pm => pm.Product)
-            .WithMany(p => p.ProductMedia)
-            .HasForeignKey(pm => pm.ProductId);
-
-        builder.Entity<ProductMedia>()
-            .HasOne(pm => pm.Media)
-            .WithMany(m => m.ProductMedia)
-            .HasForeignKey(pm => pm.MediaId);
-    }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
