@@ -1,0 +1,22 @@
+version: '3.9'
+
+services:
+
+  # Database used for sandbox testing
+  postgres-test:
+    image: postgres:14.1-alpine
+    restart: always
+    user: postgres
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=sandbox-ef
+    expose:
+      - 8765
+    ports:
+      - "8765:5432"
+    networks:
+      - sandbox-ef
+
+networks:
+  sandbox-ef:
