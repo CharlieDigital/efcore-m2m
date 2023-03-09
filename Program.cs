@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -28,22 +29,6 @@ if (app.Environment.IsDevelopment())
   app.UseSwaggerUI();
 }
 
-app.MapPost("/products/add", async (Product product, Database db) =>
-{
-  var tracking = db.Products!.Add(product);
-  await db.SaveChangesAsync();
-  return tracking.Entity;
-})
-.WithName("AddProduct");
-
-app.MapPost("/media/add", async (Media media, Database db) =>
-{
-  var tracking = db.Media!.Add(media);
-  await db.SaveChangesAsync();
-  return tracking.Entity;
-})
-.WithName("AddMedia");
-
 app.MapGet("/products/", async (Database db) =>
 {
   var products = await db.Products
@@ -55,7 +40,7 @@ app.MapGet("/products/", async (Database db) =>
 })
 .WithName("GetProducts");
 
-app.MapGet("/products/{id:int}", async (int id, Database db) =>
+app.MapGet("/products/{id:guid}", async (Guid id, Database db) =>
 {
   var product = await db.Products
       .TagWith("LOAD_PRODUCT")
@@ -67,18 +52,53 @@ app.MapGet("/products/{id:int}", async (int id, Database db) =>
 })
 .WithName("GetProduct");
 
+app.MapGet("/groups/{id:guid}", async (Guid id, Database db) =>
+{
+  var group = await db.ProductGroups
+      .TagWith("LOAD_PRODUCT_GROUP")
+      .Where(pg => pg.Id == id)
+      .AsSplitQuery()
+      .Include(pg => pg.Products!)
+      .ThenInclude(p => p.Media)
+      .FirstOrDefaultAsync();
+
+  return group;
+})
+.WithName("GetProductGroup");
+
+app.MapPost("/groups/", async ([FromBody] IEnumerable<Guid> ids, Database db) =>
+{
+  var groups = await db.ProductGroups
+      .TagWith("LOAD_PRODUCT_GROUP")
+      .Where(pg => ids.Contains(pg.Id))
+      .AsSplitQuery()
+      .Include(pg => pg.Products!)
+      .ThenInclude(p => p.Media)
+      .ToListAsync();
+
+  return groups;
+})
+.WithName("GetProductGroups");
+
 app.Run();
 
 // DB entity classes
 public abstract class Entity
 {
-  public int Id { get; set; }
+  public Guid Id { get; set; }
   public string Name { get; set; } = "";
   public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
 }
 
+public class ProductGroup : Entity
+{
+  public virtual List<Product>? Products { get; set; }
+}
+
 public class Product : Entity
 {
+  [JsonIgnore]
+  public virtual List<ProductGroup>? ProductGroups { get; set; }
   public virtual List<Media>? Media { get; set; }
 }
 
@@ -92,6 +112,9 @@ public class Media : Entity
 public class Database : DbContext
 {
   private string _connectionString = "server=127.0.0.1;port=8765;database=sandbox-ef;user id=postgres;password=postgres;include error detail=true";
+
+  [NotNull]
+  public DbSet<ProductGroup>? ProductGroups { get; set; }
 
   [NotNull]
   public DbSet<Product>? Products { get; set; }
